@@ -4,7 +4,7 @@ import requests
 import os
 import re
 
-USERNAME = "VolkanSah"
+USERNAME = "YOUR_USERNAME"
 TOKEN = os.getenv("GITHUB_TOKEN")
 
 if not TOKEN:
