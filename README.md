@@ -1,8 +1,8 @@
 # 📊 GitHub Stats Auto-Update
 
-Automatically update your GitHub stats in the README.md using GitHub Actions. Demo https://github.com/VolkanSah/
+Automatically update your GitHub stats in the README.md using GitHub Actions. [Demo](https://github.com/VolkanSah/)
 
-## 🎯 What does the script do?
+##  What does the script do?
 
 The script displays **only public** GitHub stats with detailed breakdown:
 
@@ -16,7 +16,7 @@ The script displays **only public** GitHub stats with detailed breakdown:
 
 > **Note:** Private repositories and their stars are not counted. The script uses only publicly available API data via GraphQL for accurate pagination.
 
-## ✨ Features
+##  Features
 
 - ✅ **Complete pagination** - fetches ALL repos (not just first 100)
 - ✅ **Archive-aware** - separates active from archived repository stars
@@ -25,7 +25,7 @@ The script displays **only public** GitHub stats with detailed breakdown:
 - ✅ **Top 10 list** - displays your most starred repositories
 - ✅ **Full repo list** - complete overview of all repos with stars
 
-## 🚀 Setup
+## Setup
 
 ### 1. Create the files
 
@@ -317,7 +317,7 @@ In the repository under "Actions" → "Update Stats" → "Run workflow"
 * **Error handling:** Aborts on errors, no broken updates
 * **Top 10 list:** Shows your most popular repositories in console output
 
-## 🎨 Customization
+##  Customization
 
 You can adjust the Markdown output in the `stats_md` variable in the `update_readme()` function.
 
@@ -350,7 +350,7 @@ stats_md = f"""<!-- STATS-START -->
 * Daily updates should work fine
 * Manual runs might hit limits if run too frequently
 
-## 🌟 Why GraphQL?
+##  Why GraphQL?
 
 This script uses GitHub's GraphQL API instead of REST because:
 - ✅ **Complete pagination** - no 100-repo limit issues
@@ -362,3 +362,6 @@ This script uses GitHub's GraphQL API instead of REST because:
 ---
 
 **Enjoy your automatic GitHub stats with full transparency! 🎉**
+
+### Copyright
+Volkan Kücükbudak
