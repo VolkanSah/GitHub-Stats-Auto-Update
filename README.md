@@ -4,14 +4,26 @@ Automatically update your GitHub stats in the README.md using GitHub Actions. De
 
 ## 🎯 What does the script do?
 
-The script displays **only public** GitHub stats:
+The script displays **only public** GitHub stats with detailed breakdown:
 
-* Public repositories
-* Total stars (from public repos only)
-* Total forks (from public repos only)
-* Followers
+* Public repositories (active + archived)
+* Total stars separated by:
+  - ⭐ Active repository stars
+  - 💎 Archived repository stars
+  - 🌟 Total stars per category
+* Separate stats for own repos vs. forked repos
+* 🎯 Grand total of all stars
 
-> **Note:** Private repositories and their stars/forks are not counted. The script uses only publicly available API data.
+> **Note:** Private repositories and their stars are not counted. The script uses only publicly available API data via GraphQL for accurate pagination.
+
+## ✨ Features
+
+- ✅ **Complete pagination** - fetches ALL repos (not just first 100)
+- ✅ **Archive-aware** - separates active from archived repository stars
+- ✅ **Fork separation** - distinguishes between own and forked repos
+- ✅ **Detailed breakdown** - shows active, archived, and total stats
+- ✅ **Top 10 list** - displays your most starred repositories
+- ✅ **Full repo list** - complete overview of all repos with stars
 
 ## 🚀 Setup
 
@@ -70,89 +82,171 @@ import os
 import re
 
 # GitHub Username - ENTER YOUR USERNAME HERE!
-username = "YOUR_USERNAME_HERE"
+USERNAME = "YOUR_USERNAME_HERE"
 
-# Get Token
-token = os.getenv("GITHUB_TOKEN")
-if not token:
+TOKEN = os.getenv("GITHUB_TOKEN")
+if not TOKEN:
     print("❌ GITHUB_TOKEN not found!")
     exit(1)
 
-headers = {"Authorization": f"Bearer {token}"}
+HEADERS = {"Authorization": f"Bearer {TOKEN}"}
 
-# API Calls with Error Handling
-try:
-    user_url = f"https://api.github.com/users/{username}"
+def fetch_all_repos(is_fork):
+    """Fetch ALL repos with pagination + extended info"""
+    all_repos = []
+    has_next = True
+    cursor = None
     
-    print("🔍 Fetching user data...")
-    user_response = requests.get(user_url, headers=headers)
-    user_response.raise_for_status()
-    user_data = user_response.json()
+    while has_next:
+        query = """
+        {
+          user(login: "%s") {
+            repositories(first: 100, privacy: PUBLIC, isFork: %s, ownerAffiliations: OWNER%s) {
+              nodes {
+                name
+                stargazerCount
+                isArchived
+                isDisabled
+                isLocked
+                owner {
+                  login
+                }
+              }
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+            }
+          }
+        }
+        """ % (USERNAME, str(is_fork).lower(), f', after: "{cursor}"' if cursor else '')
+        
+        try:
+            response = requests.post(
+                "https://api.github.com/graphql",
+                json={"query": query},
+                headers=HEADERS
+            )
+            response.raise_for_status()
+            data = response.json()
+            
+            if "errors" in data:
+                print(f"❌ API Error: {data['errors']}")
+                exit(1)
+            
+            repos = data["data"]["user"]["repositories"]
+            all_repos.extend(repos["nodes"])
+            
+            page_info = repos["pageInfo"]
+            has_next = page_info["hasNextPage"]
+            cursor = page_info["endCursor"]
+            
+            print(f"  📦 Fetched {len(repos['nodes'])} repos (Total: {len(all_repos)})")
+            
+        except requests.exceptions.RequestException as e:
+            print(f"❌ API Error: {e}")
+            exit(1)
     
-    print("🔍 Fetching repo data...")
-    repos_data = []
-    page = 1
-    while True:
-        repos_url_page = f"https://api.github.com/users/{username}/repos?per_page=100&page={page}"
-        repos_response = requests.get(repos_url_page, headers=headers)
-        repos_response.raise_for_status()
-        page_data = repos_response.json()
-        if not page_data:  # No more repos
-            break
-        repos_data.extend(page_data)
-        page += 1
-    
-    # Debug: Check type
-    print(f"📊 Repositories found: {len(repos_data)}")
-    
-    # Calculate stats (public repos only)
-    total_stars = sum(repo.get("stargazers_count", 0) for repo in repos_data)
-    total_forks = sum(repo.get("forks_count", 0) for repo in repos_data)
-    public_repos = user_data.get("public_repos", 0)
-    followers = user_data.get("followers", 0)
-    
-    print(f"⭐ Stars: {total_stars}, 🍴 Forks: {total_forks}, 📁 Repos: {public_repos}, 👥 Followers: {followers}")
-    
-except requests.exceptions.RequestException as e:
-    print(f"❌ API Error: {e}")
-    exit(1)
-except Exception as e:
-    print(f"❌ Error: {e}")
-    exit(1)
+    return all_repos
 
-# Markdown content
-stats_md = f"""<!-- STATS-START -->
-# 📊 GitHub Stats
-- **Public Repositories:** {public_repos}
-- **Total Stars:** {total_stars}
-- **Total Forks:** {total_forks}
-- **Followers:** {followers}
+def calculate_stats(repos, repo_type):
+    """Calculate stats with filtering"""
+    # Filter: Only active, non-archived repos
+    active_repos = [
+        r for r in repos 
+        if not r.get("isArchived", False) 
+        and not r.get("isDisabled", False)
+        and not r.get("isLocked", False)
+        and r.get("owner", {}).get("login") == USERNAME
+    ]
+    
+    # Archived repos separately
+    archived_repos = [
+        r for r in repos 
+        if (r.get("isArchived", False) or r.get("isDisabled", False) or r.get("isLocked", False))
+        and r.get("owner", {}).get("login") == USERNAME
+    ]
+    
+    archived_count = len(archived_repos)
+    archived_stars = sum(repo.get("stargazerCount", 0) for repo in archived_repos)
+    
+    active_stars = sum(repo.get("stargazerCount", 0) for repo in active_repos)
+    active_count = len(active_repos)
+    
+    print(f"\n📊 {repo_type.capitalize()} Repositories:")
+    print(f"  ✅ Active: {active_count}")
+    if archived_count > 0:
+        print(f"  🗄️  Archived/Disabled: {archived_count} (with {archived_stars} ⭐)")
+    print(f"⭐ {repo_type.capitalize()} Stars:")
+    print(f"  Active: {active_stars}")
+    if archived_stars > 0:
+        print(f"  Archive: {archived_stars} 💎")
+    print(f"  Total: {active_stars + archived_stars}")
+    
+    # Top 10 repos with most stars
+    print(f"\n🏆 Top 10 {repo_type} Repos:")
+    top_repos = sorted(active_repos, key=lambda x: x.get("stargazerCount", 0), reverse=True)[:10]
+    for i, repo in enumerate(top_repos, 1):
+        print(f"  {i:2}. {repo['name']:40} {repo.get('stargazerCount', 0):4} ⭐")
+    
+    return active_count, active_stars, archived_count, archived_stars
+
+def update_readme(own_repos, own_stars, own_archived_stars, forked_repos, forked_stars, forked_archived_stars):
+    """Update the README"""
+    stats_md = f"""<!-- STATS-START -->
+## 📊 GitHub Stats
+- **Own Public Repositories:** {own_repos}
+  - ⭐ Active Stars: {own_stars}
+  - 💎 Archived Stars: {own_archived_stars}
+  - 🌟 Total Own Stars: {own_stars + own_archived_stars}
+- **Forked Public Repositories:** {forked_repos}
+  - ⭐ Active Stars: {forked_stars}
+  - 💎 Archived Stars: {forked_archived_stars}
+  - 🌟 Total Fork Stars: {forked_stars + forked_archived_stars}
+- **🎯 Grand Total Stars:** {own_stars + own_archived_stars + forked_stars + forked_archived_stars}
 
 *Last updated automatically via GitHub Actions.*
 <!-- STATS-END -->"""
+    
+    try:
+        with open("README.md", "r", encoding="utf-8") as f:
+            readme_content = f.read()
+    except FileNotFoundError:
+        print("❌ README.md not found!")
+        exit(1)
+    
+    pattern = r"<!-- STATS-START -->.*?<!-- STATS-END -->"
+    if re.search(pattern, readme_content, re.DOTALL):
+        new_readme = re.sub(pattern, stats_md, readme_content, flags=re.DOTALL)
+        print("\n✅ Stats section updated.")
+    else:
+        new_readme = readme_content.strip() + "\n\n" + stats_md
+        print("\n✅ Stats section added.")
+    
+    with open("README.md", "w", encoding="utf-8") as f:
+        f.write(new_readme)
+    
+    print("🎉 Done!")
 
-# Load README
-try:
-    with open("README.md", "r", encoding="utf-8") as f:
-        readme_content = f.read()
-except FileNotFoundError:
-    print("❌ README.md not found!")
-    exit(1)
-
-# Replace or insert block
-pattern = r"<!-- STATS-START -->.*?<!-- STATS-END -->"
-if re.search(pattern, readme_content, re.DOTALL):
-    new_readme = re.sub(pattern, stats_md, readme_content, flags=re.DOTALL)
-    print("✅ Stats section in README.md updated.")
-else:
-    new_readme = readme_content.strip() + "\n\n" + stats_md
-    print("✅ Stats section added to README.md.")
-
-# Save
-with open("README.md", "w", encoding="utf-8") as f:
-    f.write(new_readme)
-
-print("🎉 Done!")
+if __name__ == "__main__":
+    print("🔍 Fetching own repositories...")
+    own_repos_data = fetch_all_repos(False)
+    own_repos, own_stars, own_archived, own_archived_stars = calculate_stats(own_repos_data, "own")
+    
+    print("\n" + "="*80)
+    print("🔍 Fetching forked repositories...")
+    forked_repos_data = fetch_all_repos(True)
+    forked_repos, forked_stars, forked_archived, forked_archived_stars = calculate_stats(forked_repos_data, "forked")
+    
+    print("\n" + "="*80)
+    print(f"📈 TOTAL:")
+    print(f"  Active Repos: {own_repos + forked_repos}")
+    print(f"  Archived Repos: {own_archived + forked_archived}")
+    print(f"  ⭐ Active Stars: {own_stars + forked_stars}")
+    print(f"  💎 Archive Stars: {own_archived_stars + forked_archived_stars}")
+    print(f"  🌟 GRAND TOTAL: {own_stars + own_archived_stars + forked_stars + forked_archived_stars} ⭐")
+    
+    update_readme(own_repos, own_stars, own_archived_stars, forked_repos, forked_stars, forked_archived_stars)
 ```
 
 ### 2. Prepare your README.md
@@ -169,7 +263,7 @@ Add these markers in your README.md where the stats should appear:
 **Important:** Change the following line in `update_stats.py`:
 
 ```python
-username = "YOUR_USERNAME_HERE"
+USERNAME = "YOUR_USERNAME_HERE"
 ```
 
 ### 4. Test the Action
@@ -178,6 +272,21 @@ username = "YOUR_USERNAME_HERE"
 * Click "Actions"
 * Select "Update Stats"
 * Click "Run workflow"
+
+## 📊 Stats Breakdown
+
+The script shows:
+
+### Own Repositories
+- **Active Stars**: Stars from currently maintained projects
+- **Archived Stars**: Stars from archived/legacy projects
+- **Total Own Stars**: Complete star history
+
+### Forked Repositories  
+- Same breakdown for your forked repositories
+
+### Grand Total
+- Your complete GitHub star collection across all public repositories
 
 ## ⚙️ Configuration
 
@@ -198,43 +307,58 @@ In the repository under "Actions" → "Update Stats" → "Run workflow"
 * Uses the default `GITHUB_TOKEN` (no extra secrets needed)
 * Displays only public data
 * No private repository information
+* Uses GraphQL API for efficient data fetching
 
 ## 📝 Notes
 
 * **Public stats only:** Private repos are not included
-* **API limits:** GitHub API has rate limits, but daily updates are fine
-* **Pagination:** Fetches all repos (even over 100)
+* **Complete pagination:** Fetches ALL repositories (no 100-repo limit)
+* **Archive-aware:** Distinguishes between active and archived projects
 * **Error handling:** Aborts on errors, no broken updates
+* **Top 10 list:** Shows your most popular repositories in console output
 
 ## 🎨 Customization
 
-You can adjust the Markdown output in the `stats_md` variable:
+You can adjust the Markdown output in the `stats_md` variable in the `update_readme()` function.
+
+Example for a compact single-line format:
 
 ```python
 stats_md = f"""<!-- STATS-START -->
-# 🚀 My GitHub Journey
-**📁 Repositories:** {public_repos} | **⭐ Stars:** {total_stars} | **🍴 Forks:** {total_forks} | **👥 Followers:** {followers}
+**📁 Repos:** {own_repos} | **⭐ Active Stars:** {own_stars} | **💎 Archive Stars:** {own_archived_stars} | **🎯 Total:** {own_stars + own_archived_stars + forked_stars + forked_archived_stars}
 <!-- STATS-END -->"""
 ```
 
 ## 🛠️ Troubleshooting
 
 **Action fails:**
-
 * Check if your username is correct
 * Look at the Action logs for details
+* Verify `GITHUB_TOKEN` permissions
 
 **Stats don't show:**
-
 * Make sure `<!-- STATS-START -->` and `<!-- STATS-END -->` are in your README.md
+* Check that markers are on separate lines
 
 **Numbers seem wrong:**
-
 * The script only counts public repository stats
 * Private repos are not included
+* Check console output for detailed breakdown
+
+**GraphQL API errors:**
+* GitHub API has rate limits
+* Daily updates should work fine
+* Manual runs might hit limits if run too frequently
+
+## 🌟 Why GraphQL?
+
+This script uses GitHub's GraphQL API instead of REST because:
+- ✅ **Complete pagination** - no 100-repo limit issues
+- ✅ **Single request** per page - more efficient
+- ✅ **Precise filtering** - `ownerAffiliations: OWNER` ensures only your repos
+- ✅ **Archive detection** - knows which repos are archived
+- ✅ **Better rate limits** - GraphQL is more efficient
 
 ---
 
-**Enjoy your automatic GitHub stats! 🎉**
-
-
+**Enjoy your automatic GitHub stats with full transparency! 🎉**
