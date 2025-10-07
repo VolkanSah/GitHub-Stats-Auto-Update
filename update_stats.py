@@ -14,7 +14,7 @@ except ImportError:
     TABULATE_AVAILABLE = False
 
 # GitHub Username
-username = "YOUR_USERNAME_HERE"
+username = "volkansah"
 
 # Token holen
 token = os.getenv("GITHUB_TOKEN")
@@ -102,7 +102,7 @@ def format_languages(lang_counter):
     return "\n".join(f"- {lang}: {count}" for lang, count in lang_counter.items())
 
 stats_md = f"""<!-- STATS-START -->
-# 📊 GitHub Stats
+### 📊 GitHub Stats
 - **Own Public Repositories:** {own_public_repo_count}
   - ⭐ Stars: {own_total_stars}
   - 🍴 Forks: {own_total_forks}
@@ -119,7 +119,7 @@ stats_md = f"""<!-- STATS-START -->
 ### 🧩 Languages (Forked)
 {format_languages(forked_languages)}
 
-*Last updated automatically via GitHub Actions.*
+*Real & Clean STATS [use it >](https://github.com/VolkanSah/GitHub-Stats-Auto-Update/)*
 <!-- STATS-END -->
 """
 
